@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>粒子交互系统</title>
+    <title>增强版粒子交互系统</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose@0.0.7"></script>
     <style>
@@ -16,7 +15,6 @@
         
         body {
             overflow: hidden;
-            background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
             font-family: 'Microsoft YaHei', sans-serif;
             height: 100vh;
             display: flex;
@@ -31,92 +29,35 @@
             height: 100%;
         }
         
+        #video-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            filter: blur(10px) brightness(0.7);
+            transform: scale(1.05);
+            z-index: 1;
+        }
+        
         #canvas {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: 1;
-        }
-        
-        #video {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            width: 160px;
-            height: 120px;
-            border-radius: 8px;
-            box-shadow: 0 0 20px rgba(0, 150, 255, 0.5);
             z-index: 2;
-            transform: scaleX(-1);
-            display: none; /* 隐藏小窗，符合要求 */
         }
         
-        .instructions {
+        .overlay {
             position: absolute;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.7);
-            padding: 15px 25px;
-            border-radius: 15px;
-            text-align: center;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, transparent 60%, rgba(0, 0, 0, 0.8) 100%);
             z-index: 3;
-            backdrop-filter: blur(5px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        
-        .instructions h2 {
-            margin-bottom: 10px;
-            color: #4cc9f0;
-            font-size: 22px;
-        }
-        
-        .instructions p {
-            margin: 8px 0;
-            font-size: 16px;
-            line-height: 1.5;
-        }
-        
-        .gesture-display {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 15px;
-            border-radius: 15px;
-            z-index: 3;
-            backdrop-filter: blur(5px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        
-        .gesture-display h3 {
-            color: #f72585;
-            margin-bottom: 10px;
-        }
-        
-        .status {
-            display: flex;
-            gap: 15px;
-            margin-top: 10px;
-        }
-        
-        .hand-status {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        
-        .hand-label {
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        
-        .hand-value {
-            padding: 5px 10px;
-            border-radius: 20px;
-            background: rgba(255, 255, 255, 0.1);
         }
         
         .loading {
@@ -145,27 +86,131 @@
             100% { transform: rotate(360deg); }
         }
         
-        .particle-count {
+        .gesture-display {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px;
+            border-radius: 15px;
+            z-index: 4;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .gesture-display h3 {
+            color: #f72585;
+            margin-bottom: 10px;
+        }
+        
+        .status {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+        }
+        
+        .hand-status {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .hand-label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        
+        .hand-value {
+            padding: 5px 10px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            font-size: 14px;
+        }
+        
+        .instructions {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px 25px;
+            border-radius: 15px;
+            text-align: center;
+            z-index: 4;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-width: 90%;
+        }
+        
+        .instructions h2 {
+            margin-bottom: 10px;
+            color: #4cc9f0;
+            font-size: 20px;
+        }
+        
+        .instructions p {
+            margin: 8px 0;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        
+        .performance {
             position: absolute;
             top: 20px;
             right: 20px;
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(0, 0, 0, 0.6);
             padding: 10px 15px;
             border-radius: 15px;
-            z-index: 3;
+            z-index: 4;
             backdrop-filter: blur(5px);
             border: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 14px;
+        }
+        
+        .particle-preview {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            font-weight: bold;
+            color: rgba(255, 255, 255, 0.1);
+            z-index: 3;
+            pointer-events: none;
+            text-align: center;
+            width: 100%;
+        }
+        
+        .finger-indicator {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: rgba(247, 37, 133, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            z-index: 5;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
         }
     </style>
 </head>
 <body>
     <div class="container">
+        <video id="video-bg" autoplay playsinline muted></video>
         <canvas id="canvas"></canvas>
-        <video id="video" playsinline></video>
+        <div class="overlay"></div>
+        
+        <div class="particle-preview" id="preview-text"></div>
         
         <div class="loading" id="loading">
             <div class="loading-spinner"></div>
             <p>正在加载模型和摄像头...</p>
+            <p style="font-size: 16px; margin-top: 10px;">请允许摄像头访问权限</p>
         </div>
         
         <div class="gesture-display">
@@ -182,16 +227,17 @@
             </div>
         </div>
         
-        <div class="particle-count">
-            粒子数量: <span id="count">0</span>
+        <div class="performance">
+            FPS: <span id="fps">0</span> | 
+            粒子: <span id="count">0</span>
         </div>
         
         <div class="instructions">
-            <h2>粒子交互系统使用指南</h2>
+            <h2>增强版粒子交互系统</h2>
             <p>左手手势控制显示内容：</p>
-            <p>✌️ 1根手指 → 显示 "HELLO"</p>
-            <p>🤟 2根手指 → 显示 "南航"</p>
-            <p>🤙 3根手指 → 显示 "I LOVE YOU"</p>
+            <p>☝️ 1根手指 → 显示 "HELLO"</p>
+            <p>✌️ 2根手指 → 显示 "南航"</p>
+            <p>🤟 3根手指 → 显示 "I LOVE YOU"</p>
             <p>右手控制粒子行为：</p>
             <p>✊ 握拳 → 粒子收缩</p>
             <p>🖐️ 张开 → 粒子扩散</p>
@@ -203,17 +249,24 @@
         // 主要变量
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
-        const video = document.getElementById('video');
+        const video = document.getElementById('video-bg');
         const loadingElement = document.getElementById('loading');
         const leftHandElement = document.getElementById('left-hand');
         const rightHandElement = document.getElementById('right-hand');
         const particleCountElement = document.getElementById('count');
+        const fpsElement = document.getElementById('fps');
+        const previewText = document.getElementById('preview-text');
         
         let model = null;
         let particles = [];
         let currentText = '';
         let handpose = null;
         let animationId = null;
+        let lastTimestamp = 0;
+        let frameCount = 0;
+        let fps = 0;
+        let mouse = { x: null, y: null };
+        let fingerIndicator = null;
         
         // 调整Canvas大小为窗口大小
         function resizeCanvas() {
@@ -226,59 +279,68 @@
             constructor(x, y) {
                 this.x = x;
                 this.y = y;
-                this.size = Math.random() * 3 + 1;
+                this.size = Math.random() * 2 + 1;
                 this.baseSize = this.size;
                 this.targetX = x;
                 this.targetY = y;
-                this.speed = Math.random() * 0.5 + 0.1;
-                this.color = `hsl(${Math.random() * 360}, 70%, 60%)`;
+                this.vx = 0;
+                this.vy = 0;
+                this.friction = 0.85;
+                this.springFactor = 0.1;
+                this.color = `hsl(${Math.random() * 360}, 80%, 65%)`;
                 this.history = [];
-                this.maxHistory = 5;
+                this.maxHistory = 3;
             }
             
-            update(mouse) {
+            update() {
                 // 保存历史位置
                 this.history.push({x: this.x, y: this.y});
                 if (this.history.length > this.maxHistory) {
                     this.history.shift();
                 }
                 
-                // 向目标位置移动
+                // 弹簧物理效果
                 let dx = this.targetX - this.x;
                 let dy = this.targetY - this.y;
-                this.x += dx * this.speed * 0.05;
-                this.y += dy * this.speed * 0.05;
+                
+                this.vx += dx * this.springFactor;
+                this.vy += dy * this.springFactor;
+                
+                this.vx *= this.friction;
+                this.vy *= this.friction;
+                
+                this.x += this.vx;
+                this.y += this.vy;
                 
                 // 鼠标交互
-                if (mouse.x && mouse.y) {
+                if (mouse.x !== null && mouse.y !== null) {
                     let dx = this.x - mouse.x;
                     let dy = this.y - mouse.y;
                     let distance = Math.sqrt(dx * dx + dy * dy);
                     
-                    if (distance < 100) {
-                        let force = (100 - distance) / 100;
-                        this.x += dx * force * 0.1;
-                        this.y += dy * force * 0.1;
+                    if (distance < 120) {
+                        let angle = Math.atan2(dy, dx);
+                        let force = (120 - distance) / 120 * 2;
+                        this.vx += Math.cos(angle) * force;
+                        this.vy += Math.sin(angle) * force;
                     }
                 }
                 
                 // 边界检查
-                if (this.x < 0 || this.x > canvas.width) {
-                    this.x = Math.max(0, Math.min(canvas.width, this.x));
-                }
-                if (this.y < 0 || this.y > canvas.height) {
-                    this.y = Math.max(0, Math.min(canvas.height, this.y));
-                }
+                if (this.x < 0) this.x = 0;
+                if (this.x > canvas.width) this.x = canvas.width;
+                if (this.y < 0) this.y = 0;
+                if (this.y > canvas.height) this.y = canvas.height;
             }
             
             draw() {
                 // 绘制轨迹
                 for (let i = 0; i < this.history.length; i++) {
                     const point = this.history[i];
-                    const alpha = i / this.history.length;
+                    const alpha = i / this.history.length * 0.3;
                     ctx.beginPath();
                     ctx.arc(point.x, point.y, this.size * alpha, 0, Math.PI * 2);
-                    ctx.fillStyle = `${this.color.slice(0, -1)}, ${alpha * 0.5})`;
+                    ctx.fillStyle = `${this.color.replace(')', `, ${alpha})`).replace('hsl', 'hsla')}`;
                     ctx.fill();
                 }
                 
@@ -287,39 +349,65 @@
                 ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
                 ctx.fillStyle = this.color;
                 ctx.fill();
+                
+                // 发光效果
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size * 1.5, 0, Math.PI * 2);
+                const gradient = ctx.createRadialGradient(
+                    this.x, this.y, 0, 
+                    this.x, this.y, this.size * 1.5
+                );
+                gradient.addColorStop(0, this.color.replace(')', ', 0.8)').replace('hsl', 'hsla'));
+                gradient.addColorStop(1, this.color.replace(')', ', 0)').replace('hsl', 'hsla'));
+                ctx.fillStyle = gradient;
+                ctx.fill();
             }
         }
         
-        // 创建粒子文字
+        // 快速创建粒子文字
         function createTextParticles(text, fontSize = 120) {
             particles = [];
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.font = `bold ${fontSize}px Arial`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillStyle = 'white';
-            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+            previewText.textContent = text;
             
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            // 使用离屏Canvas提高性能
+            const offscreen = document.createElement('canvas');
+            offscreen.width = canvas.width;
+            offscreen.height = canvas.height;
+            const offCtx = offscreen.getContext('2d');
+            
+            offCtx.clearRect(0, 0, offscreen.width, offscreen.height);
+            offCtx.font = `bold ${fontSize}px Arial`;
+            offCtx.textAlign = 'center';
+            offCtx.textBaseline = 'middle';
+            offCtx.fillStyle = 'white';
+            offCtx.fillText(text, offscreen.width / 2, offscreen.height / 2);
+            
+            const imageData = offCtx.getImageData(0, 0, offscreen.width, offscreen.height);
             const data = imageData.data;
             
-            // 清除画布
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // 批量创建粒子
+            const newParticles = [];
+            const density = 3; // 采样密度
             
-            // 从图像数据中创建粒子
-            for (let y = 0; y < canvas.height; y += 4) {
-                for (let x = 0; x < canvas.width; x += 4) {
-                    const index = (y * canvas.width + x) * 4;
-                    if (data[index + 3] > 128) { // 检查alpha通道
-                        particles.push(new Particle(
-                            x + Math.random() * 4 - 2,
-                            y + Math.random() * 4 - 2
-                        ));
+            for (let y = 0; y < offscreen.height; y += density) {
+                for (let x = 0; x < offscreen.width; x += density) {
+                    const idx = (y * offscreen.width + x) * 4;
+                    if (data[idx + 3] > 128) {
+                        // 添加随机偏移使效果更自然
+                        const px = x + (Math.random() - 0.5) * density;
+                        const py = y + (Math.random() - 0.5) * density;
+                        newParticles.push(new Particle(px, py));
                     }
                 }
             }
             
+            particles = newParticles;
             particleCountElement.textContent = particles.length;
+            
+            // 快速动画到文字形状
+            setTimeout(() => {
+                restoreTextShape();
+            }, 50);
         }
         
         // 粒子收缩
@@ -330,16 +418,16 @@
             particles.forEach(p => {
                 p.targetX = centerX;
                 p.targetY = centerY;
-                p.speed = Math.random() * 0.8 + 0.2;
             });
         }
         
         // 粒子扩散
         function expandParticles() {
             particles.forEach(p => {
-                p.targetX = p.x + (Math.random() - 0.5) * canvas.width * 0.5;
-                p.targetY = p.y + (Math.random() - 0.5) * canvas.height * 0.5;
-                p.speed = Math.random() * 0.3 + 0.1;
+                const angle = Math.random() * Math.PI * 2;
+                const distance = Math.random() * Math.min(canvas.width, canvas.height) * 0.3;
+                p.targetX = p.x + Math.cos(angle) * distance;
+                p.targetY = p.y + Math.sin(angle) * distance;
             });
         }
         
@@ -347,26 +435,34 @@
         function restoreTextShape() {
             if (!currentText) return;
             
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.font = 'bold 120px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillStyle = 'white';
-            ctx.fillText(currentText, canvas.width / 2, canvas.height / 2);
+            // 使用离屏Canvas获取文字位置
+            const offscreen = document.createElement('canvas');
+            offscreen.width = canvas.width;
+            offscreen.height = canvas.height;
+            const offCtx = offscreen.getContext('2d');
             
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            offCtx.clearRect(0, 0, offscreen.width, offscreen.height);
+            offCtx.font = 'bold 120px Arial';
+            offCtx.textAlign = 'center';
+            offCtx.textBaseline = 'middle';
+            offCtx.fillStyle = 'white';
+            offCtx.fillText(currentText, offscreen.width / 2, offscreen.height / 2);
+            
+            const imageData = offCtx.getImageData(0, 0, offscreen.width, offscreen.height);
             const data = imageData.data;
             
-            // 为每个粒子找到最近的目标点
+            // 为每个粒子分配目标位置
             particles.forEach(p => {
                 let minDist = Infinity;
                 let targetX = p.x;
                 let targetY = p.y;
                 
-                for (let y = 0; y < canvas.height; y += 4) {
-                    for (let x = 0; x < canvas.width; x += 4) {
-                        const index = (y * canvas.width + x) * 4;
-                        if (data[index + 3] > 128) {
+                // 在粒子周围搜索最近的文字像素
+                const searchRadius = 50;
+                for (let y = Math.max(0, p.y - searchRadius); y < Math.min(offscreen.height, p.y + searchRadius); y += 2) {
+                    for (let x = Math.max(0, p.x - searchRadius); x < Math.min(offscreen.width, p.x + searchRadius); x += 2) {
+                        const idx = (y * offscreen.width + x) * 4;
+                        if (data[idx + 3] > 128) {
                             const dist = Math.sqrt((x - p.x) ** 2 + (y - p.y) ** 2);
                             if (dist < minDist) {
                                 minDist = dist;
@@ -379,42 +475,107 @@
                 
                 p.targetX = targetX;
                 p.targetY = targetY;
-                p.speed = Math.random() * 0.2 + 0.05;
             });
         }
         
-        // 计算手指数量
-        function countFingers(landmarks) {
-            // 简化的手指计数逻辑
-            const thumbTip = landmarks[4];
-            const indexTip = landmarks[8];
-            const middleTip = landmarks[12];
-            const ringTip = landmarks[16];
-            const pinkyTip = landmarks[20];
-            
-            const wrist = landmarks[0];
+        // 增强的手势识别
+        function analyzeHand(landmarks, handedness) {
+            // 关键点索引
+            const WRIST = 0;
+            const THUMB_CMC = 1;
+            const THUMB_MCP = 2;
+            const THUMB_IP = 3;
+            const THUMB_TIP = 4;
+            const INDEX_MCP = 5;
+            const INDEX_PIP = 6;
+            const INDEX_DIP = 7;
+            const INDEX_TIP = 8;
+            const MIDDLE_MCP = 9;
+            const MIDDLE_PIP = 10;
+            const MIDDLE_DIP = 11;
+            const MIDDLE_TIP = 12;
+            const RING_MCP = 13;
+            const RING_PIP = 14;
+            const RING_DIP = 15;
+            const RING_TIP = 16;
+            const PINKY_MCP = 17;
+            const PINKY_PIP = 18;
+            const PINKY_DIP = 19;
+            const PINKY_TIP = 20;
             
             // 计算指尖到手腕的距离
-            const distances = [
-                Math.sqrt(Math.pow(thumbTip[0] - wrist[0], 2) + Math.pow(thumbTip[1] - wrist[1], 2)),
-                Math.sqrt(Math.pow(indexTip[0] - wrist[0], 2) + Math.pow(indexTip[1] - wrist[1], 2)),
-                Math.sqrt(Math.pow(middleTip[0] - wrist[0], 2) + Math.pow(middleTip[1] - wrist[1], 2)),
-                Math.sqrt(Math.pow(ringTip[0] - wrist[0], 2) + Math.pow(ringTip[1] - wrist[1], 2)),
-                Math.sqrt(Math.pow(pinkyTip[0] - wrist[0], 2) + Math.pow(pinkyTip[1] - wrist[1], 2))
-            ];
+            const getDistance = (point1, point2) => {
+                return Math.sqrt(
+                    Math.pow(point1[0] - point2[0], 2) + 
+                    Math.pow(point1[1] - point2[1], 2)
+                );
+            };
             
-            // 找出最大距离作为参考
-            const maxDistance = Math.max(...distances);
+            // 计算手指角度
+            const getAngle = (a, b, c) => {
+                const ab = [b[0] - a[0], b[1] - a[1]];
+                const cb = [b[0] - c[0], b[1] - c[1]];
+                const dot = ab[0] * cb[0] + ab[1] * cb[1];
+                const magAB = Math.sqrt(ab[0]*ab[0] + ab[1]*ab[1]);
+                const magCB = Math.sqrt(cb[0]*cb[0] + cb[1]*cb[1]);
+                return Math.acos(dot / (magAB * magCB));
+            };
+            
+            // 判断手指是否伸直
+            const isFingerExtended = (mcp, pip, tip) => {
+                const angle = getAngle(mcp, pip, tip);
+                return angle < 2.0; // 角度小于约115度视为伸直
+            };
+            
+            // 拇指特殊处理
+            const isThumbExtended = (wrist, thumbMcp, thumbIp, thumbTip) => {
+                const angle = getAngle(wrist, thumbMcp, thumbTip);
+                return angle > 1.0; // 角度大于约57度视为伸直
+            };
+            
+            // 计算各手指状态
+            const fingers = {
+                thumb: isThumbExtended(
+                    landmarks[WRIST], 
+                    landmarks[THUMB_MCP], 
+                    landmarks[THUMB_IP], 
+                    landmarks[THUMB_TIP]
+                ),
+                index: isFingerExtended(
+                    landmarks[INDEX_MCP], 
+                    landmarks[INDEX_PIP], 
+                    landmarks[INDEX_TIP]
+                ),
+                middle: isFingerExtended(
+                    landmarks[MIDDLE_MCP], 
+                    landmarks[MIDDLE_PIP], 
+                    landmarks[MIDDLE_TIP]
+                ),
+                ring: isFingerExtended(
+                    landmarks[RING_MCP], 
+                    landmarks[RING_PIP], 
+                    landmarks[RING_TIP]
+                ),
+                pinky: isFingerExtended(
+                    landmarks[PINKY_MCP], 
+                    landmarks[PINKY_PIP], 
+                    landmarks[PINKY_TIP]
+                )
+            };
             
             // 计算伸直的手指数量
-            let count = 0;
-            for (let i = 1; i < distances.length; i++) {
-                if (distances[i] > maxDistance * 0.7) {
-                    count++;
-                }
+            let extendedCount = 0;
+            for (const finger in fingers) {
+                if (fingers[finger]) extendedCount++;
             }
             
-            return count;
+            // 返回结果
+            return {
+                extendedCount,
+                isFist: extendedCount === 0,
+                isOpen: extendedCount >= 4,
+                fingers
+            };
         }
         
         // 检测手势
@@ -422,7 +583,7 @@
             if (!model) return;
             
             const predictions = await model.estimateHands(video);
-            const mouse = { x: null, y: null };
+            mouse = { x: null, y: null };
             
             // 重置手势显示
             leftHandElement.textContent = '未检测';
@@ -431,39 +592,62 @@
             if (predictions.length > 0) {
                 predictions.forEach(hand => {
                     const landmarks = hand.landmarks;
-                    const fingerCount = countFingers(landmarks);
+                    const handedness = hand.handedness; // 'Left' or 'Right'
+                    const analysis = analyzeHand(landmarks, handedness);
                     
-                    // 确定左右手（简化处理）
-                    const isLeftHand = landmarks[0][0] > 0.5;
+                    // 确定左右手（镜像处理）
+                    const isLeftHand = handedness === 'Left';
                     
                     if (isLeftHand) {
-                        leftHandElement.textContent = `${fingerCount}根手指`;
+                        // 左手 - 控制文字
+                        leftHandElement.textContent = analysis.extendedCount === 1 ? '1根手指' : 
+                                                    analysis.extendedCount === 2 ? '2根手指' : 
+                                                    analysis.extendedCount === 3 ? '3根手指' : 
+                                                    `${analysis.extendedCount}根手指`;
                         
                         // 根据手指数量设置文字
-                        if (fingerCount === 1) {
-                            currentText = 'HELLO';
-                            createTextParticles(currentText);
-                        } else if (fingerCount === 2) {
-                            currentText = '南航';
-                            createTextParticles(currentText, 150);
-                        } else if (fingerCount === 3) {
-                            currentText = 'I LOVE YOU';
-                            createTextParticles(currentText, 80);
+                        if (analysis.extendedCount === 1) {
+                            if (currentText !== 'HELLO') {
+                                currentText = 'HELLO';
+                                createTextParticles(currentText);
+                            }
+                        } else if (analysis.extendedCount === 2) {
+                            if (currentText !== '南航') {
+                                currentText = '南航';
+                                createTextParticles(currentText, 150);
+                            }
+                        } else if (analysis.extendedCount === 3) {
+                            if (currentText !== 'I LOVE YOU') {
+                                currentText = 'I LOVE YOU';
+                                createTextParticles(currentText, 80);
+                            }
+                        } else if (analysis.extendedCount === 0) {
+                            // 握拳时保持当前文字
                         }
                     } else {
-                        rightHandElement.textContent = fingerCount === 0 ? '握拳' : '张开';
+                        // 右手 - 控制粒子行为
+                        rightHandElement.textContent = analysis.isFist ? '握拳' : '张开';
                         
                         // 获取食指指尖位置作为鼠标位置
                         const indexTip = landmarks[8];
                         mouse.x = indexTip[0] * canvas.width;
                         mouse.y = indexTip[1] * canvas.height;
                         
+                        // 显示手指指示器
+                        if (!fingerIndicator) {
+                            fingerIndicator = document.createElement('div');
+                            fingerIndicator.className = 'finger-indicator';
+                            document.body.appendChild(fingerIndicator);
+                        }
+                        fingerIndicator.style.left = `${mouse.x - 15}px`;
+                        fingerIndicator.style.top = `${mouse.y - 15}px`;
+                        fingerIndicator.textContent = analysis.extendedCount;
+                        fingerIndicator.style.opacity = '1';
+                        
                         // 控制粒子行为
-                        if (fingerCount === 0) {
-                            // 握拳 - 收缩
+                        if (analysis.isFist) {
                             contractParticles();
                         } else {
-                            // 张开 - 扩散或恢复形状
                             if (currentText) {
                                 restoreTextShape();
                             } else {
@@ -472,13 +656,28 @@
                         }
                     }
                 });
+            } else {
+                // 没有检测到手时隐藏指示器
+                if (fingerIndicator) {
+                    fingerIndicator.style.opacity = '0';
+                }
             }
             
             // 更新和绘制粒子
             particles.forEach(particle => {
-                particle.update(mouse);
+                particle.update();
                 particle.draw();
             });
+            
+            // 计算FPS
+            frameCount++;
+            const now = performance.now();
+            if (now >= lastTimestamp + 1000) {
+                fps = Math.round((frameCount * 1000) / (now - lastTimestamp));
+                fpsElement.textContent = fps;
+                frameCount = 0;
+                lastTimestamp = now;
+            }
             
             animationId = requestAnimationFrame(detectHands);
         }
@@ -487,7 +686,11 @@
         async function initCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: 'user' } 
+                    video: { 
+                        facingMode: 'user',
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    } 
                 });
                 video.srcObject = stream;
                 return new Promise((resolve) => {
@@ -520,13 +723,18 @@
                 loadingElement.style.display = 'none';
                 
                 // 创建初始粒子
-                createTextParticles('HELLO');
+                currentText = 'HELLO';
+                createTextParticles(currentText);
                 
                 // 开始手势检测
                 detectHands();
             } catch (err) {
                 console.error('初始化错误:', err);
-                loadingElement.innerHTML = '<p>初始化失败，请刷新页面重试</p>';
+                loadingElement.innerHTML = `
+                    <p>初始化失败，请刷新页面重试</p>
+                    <p style="font-size: 16px; margin-top: 10px;">错误信息: ${err.message}</p>
+                    <button onclick="location.reload()" style="margin-top: 20px; padding: 8px 16px; background: #4cc9f0; border: none; border-radius: 5px; cursor: pointer;">重新加载</button>
+                `;
             }
         }
         
