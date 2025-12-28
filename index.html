@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>增强版粒子交互系统</title>
+    <title>粒子交互系统 - 修复版</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose@0.0.7"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose@0.0.7/dist/handpose.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -15,6 +15,7 @@
         
         body {
             overflow: hidden;
+            background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
             font-family: 'Microsoft YaHei', sans-serif;
             height: 100vh;
             display: flex;
@@ -69,6 +70,10 @@
             color: #4cc9f0;
             z-index: 10;
             text-align: center;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 90%;
         }
         
         .loading-spinner {
@@ -197,6 +202,64 @@
             opacity: 0;
             transition: opacity 0.3s;
         }
+        
+        .fallback-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            z-index: 11;
+            max-width: 80%;
+            display: none;
+        }
+        
+        .fallback-message button {
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: #4cc9f0;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .fallback-message button:hover {
+            background: #3aa8c9;
+        }
+        
+        .keyboard-controls {
+            position: absolute;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px;
+            border-radius: 15px;
+            z-index: 4;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: none;
+        }
+        
+        .keyboard-controls h3 {
+            color: #4cc9f0;
+            margin-bottom: 10px;
+        }
+        
+        .key {
+            display: inline-block;
+            padding: 5px 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            margin: 0 5px;
+            font-family: monospace;
+        }
     </style>
 </head>
 <body>
@@ -211,6 +274,14 @@
             <div class="loading-spinner"></div>
             <p>正在加载模型和摄像头...</p>
             <p style="font-size: 16px; margin-top: 10px;">请允许摄像头访问权限</p>
+            <p style="font-size: 14px; margin-top: 15px; color: #f72585;">如果加载时间过长，请尝试刷新页面</p>
+        </div>
+        
+        <div class="fallback-message" id="fallbackMessage">
+            <h3>模型加载遇到问题</h3>
+            <p>无法加载手势识别模型，已切换到键盘控制模式</p>
+            <p>使用键盘数字键1-3切换文字，空格键控制粒子行为</p>
+            <button id="startFallbackBtn">开始使用</button>
         </div>
         
         <div class="gesture-display">
@@ -232,8 +303,17 @@
             粒子: <span id="count">0</span>
         </div>
         
+        <div class="keyboard-controls" id="keyboardControls">
+            <h3>键盘控制</h3>
+            <p>按 <span class="key">1</span> 显示 HELLO</p>
+            <p>按 <span class="key">2</span> 显示 南航</p>
+            <p>按 <span class="key">3</span> 显示 I LOVE YOU</p>
+            <p>按 <span class="key">空格</span> 收缩/扩散粒子</p>
+            <p>按 <span class="key">R</span> 重置粒子</p>
+        </div>
+        
         <div class="instructions">
-            <h2>增强版粒子交互系统</h2>
+            <h2>粒子交互系统</h2>
             <p>左手手势控制显示内容：</p>
             <p>☝️ 1根手指 → 显示 "HELLO"</p>
             <p>✌️ 2根手指 → 显示 "南航"</p>
@@ -251,6 +331,9 @@
         const ctx = canvas.getContext('2d');
         const video = document.getElementById('video-bg');
         const loadingElement = document.getElementById('loading');
+        const fallbackMessage = document.getElementById('fallbackMessage');
+        const startFallbackBtn = document.getElementById('startFallbackBtn');
+        const keyboardControls = document.getElementById('keyboardControls');
         const leftHandElement = document.getElementById('left-hand');
         const rightHandElement = document.getElementById('right-hand');
         const particleCountElement = document.getElementById('count');
@@ -260,13 +343,14 @@
         let model = null;
         let particles = [];
         let currentText = '';
-        let handpose = null;
         let animationId = null;
         let lastTimestamp = 0;
         let frameCount = 0;
         let fps = 0;
         let mouse = { x: null, y: null };
         let fingerIndicator = null;
+        let usingFallback = false;
+        let particlesContracted = false;
         
         // 调整Canvas大小为窗口大小
         function resizeCanvas() {
@@ -478,210 +562,6 @@
             });
         }
         
-        // 增强的手势识别
-        function analyzeHand(landmarks, handedness) {
-            // 关键点索引
-            const WRIST = 0;
-            const THUMB_CMC = 1;
-            const THUMB_MCP = 2;
-            const THUMB_IP = 3;
-            const THUMB_TIP = 4;
-            const INDEX_MCP = 5;
-            const INDEX_PIP = 6;
-            const INDEX_DIP = 7;
-            const INDEX_TIP = 8;
-            const MIDDLE_MCP = 9;
-            const MIDDLE_PIP = 10;
-            const MIDDLE_DIP = 11;
-            const MIDDLE_TIP = 12;
-            const RING_MCP = 13;
-            const RING_PIP = 14;
-            const RING_DIP = 15;
-            const RING_TIP = 16;
-            const PINKY_MCP = 17;
-            const PINKY_PIP = 18;
-            const PINKY_DIP = 19;
-            const PINKY_TIP = 20;
-            
-            // 计算指尖到手腕的距离
-            const getDistance = (point1, point2) => {
-                return Math.sqrt(
-                    Math.pow(point1[0] - point2[0], 2) + 
-                    Math.pow(point1[1] - point2[1], 2)
-                );
-            };
-            
-            // 计算手指角度
-            const getAngle = (a, b, c) => {
-                const ab = [b[0] - a[0], b[1] - a[1]];
-                const cb = [b[0] - c[0], b[1] - c[1]];
-                const dot = ab[0] * cb[0] + ab[1] * cb[1];
-                const magAB = Math.sqrt(ab[0]*ab[0] + ab[1]*ab[1]);
-                const magCB = Math.sqrt(cb[0]*cb[0] + cb[1]*cb[1]);
-                return Math.acos(dot / (magAB * magCB));
-            };
-            
-            // 判断手指是否伸直
-            const isFingerExtended = (mcp, pip, tip) => {
-                const angle = getAngle(mcp, pip, tip);
-                return angle < 2.0; // 角度小于约115度视为伸直
-            };
-            
-            // 拇指特殊处理
-            const isThumbExtended = (wrist, thumbMcp, thumbIp, thumbTip) => {
-                const angle = getAngle(wrist, thumbMcp, thumbTip);
-                return angle > 1.0; // 角度大于约57度视为伸直
-            };
-            
-            // 计算各手指状态
-            const fingers = {
-                thumb: isThumbExtended(
-                    landmarks[WRIST], 
-                    landmarks[THUMB_MCP], 
-                    landmarks[THUMB_IP], 
-                    landmarks[THUMB_TIP]
-                ),
-                index: isFingerExtended(
-                    landmarks[INDEX_MCP], 
-                    landmarks[INDEX_PIP], 
-                    landmarks[INDEX_TIP]
-                ),
-                middle: isFingerExtended(
-                    landmarks[MIDDLE_MCP], 
-                    landmarks[MIDDLE_PIP], 
-                    landmarks[MIDDLE_TIP]
-                ),
-                ring: isFingerExtended(
-                    landmarks[RING_MCP], 
-                    landmarks[RING_PIP], 
-                    landmarks[RING_TIP]
-                ),
-                pinky: isFingerExtended(
-                    landmarks[PINKY_MCP], 
-                    landmarks[PINKY_PIP], 
-                    landmarks[PINKY_TIP]
-                )
-            };
-            
-            // 计算伸直的手指数量
-            let extendedCount = 0;
-            for (const finger in fingers) {
-                if (fingers[finger]) extendedCount++;
-            }
-            
-            // 返回结果
-            return {
-                extendedCount,
-                isFist: extendedCount === 0,
-                isOpen: extendedCount >= 4,
-                fingers
-            };
-        }
-        
-        // 检测手势
-        async function detectHands() {
-            if (!model) return;
-            
-            const predictions = await model.estimateHands(video);
-            mouse = { x: null, y: null };
-            
-            // 重置手势显示
-            leftHandElement.textContent = '未检测';
-            rightHandElement.textContent = '未检测';
-            
-            if (predictions.length > 0) {
-                predictions.forEach(hand => {
-                    const landmarks = hand.landmarks;
-                    const handedness = hand.handedness; // 'Left' or 'Right'
-                    const analysis = analyzeHand(landmarks, handedness);
-                    
-                    // 确定左右手（镜像处理）
-                    const isLeftHand = handedness === 'Left';
-                    
-                    if (isLeftHand) {
-                        // 左手 - 控制文字
-                        leftHandElement.textContent = analysis.extendedCount === 1 ? '1根手指' : 
-                                                    analysis.extendedCount === 2 ? '2根手指' : 
-                                                    analysis.extendedCount === 3 ? '3根手指' : 
-                                                    `${analysis.extendedCount}根手指`;
-                        
-                        // 根据手指数量设置文字
-                        if (analysis.extendedCount === 1) {
-                            if (currentText !== 'HELLO') {
-                                currentText = 'HELLO';
-                                createTextParticles(currentText);
-                            }
-                        } else if (analysis.extendedCount === 2) {
-                            if (currentText !== '南航') {
-                                currentText = '南航';
-                                createTextParticles(currentText, 150);
-                            }
-                        } else if (analysis.extendedCount === 3) {
-                            if (currentText !== 'I LOVE YOU') {
-                                currentText = 'I LOVE YOU';
-                                createTextParticles(currentText, 80);
-                            }
-                        } else if (analysis.extendedCount === 0) {
-                            // 握拳时保持当前文字
-                        }
-                    } else {
-                        // 右手 - 控制粒子行为
-                        rightHandElement.textContent = analysis.isFist ? '握拳' : '张开';
-                        
-                        // 获取食指指尖位置作为鼠标位置
-                        const indexTip = landmarks[8];
-                        mouse.x = indexTip[0] * canvas.width;
-                        mouse.y = indexTip[1] * canvas.height;
-                        
-                        // 显示手指指示器
-                        if (!fingerIndicator) {
-                            fingerIndicator = document.createElement('div');
-                            fingerIndicator.className = 'finger-indicator';
-                            document.body.appendChild(fingerIndicator);
-                        }
-                        fingerIndicator.style.left = `${mouse.x - 15}px`;
-                        fingerIndicator.style.top = `${mouse.y - 15}px`;
-                        fingerIndicator.textContent = analysis.extendedCount;
-                        fingerIndicator.style.opacity = '1';
-                        
-                        // 控制粒子行为
-                        if (analysis.isFist) {
-                            contractParticles();
-                        } else {
-                            if (currentText) {
-                                restoreTextShape();
-                            } else {
-                                expandParticles();
-                            }
-                        }
-                    }
-                });
-            } else {
-                // 没有检测到手时隐藏指示器
-                if (fingerIndicator) {
-                    fingerIndicator.style.opacity = '0';
-                }
-            }
-            
-            // 更新和绘制粒子
-            particles.forEach(particle => {
-                particle.update();
-                particle.draw();
-            });
-            
-            // 计算FPS
-            frameCount++;
-            const now = performance.now();
-            if (now >= lastTimestamp + 1000) {
-                fps = Math.round((frameCount * 1000) / (now - lastTimestamp));
-                fpsElement.textContent = fps;
-                frameCount = 0;
-                lastTimestamp = now;
-            }
-            
-            animationId = requestAnimationFrame(detectHands);
-        }
-        
         // 初始化摄像头
         async function initCamera() {
             try {
@@ -705,15 +585,213 @@
             }
         }
         
+        // 初始化手势识别
+        async function initHandpose() {
+            try {
+                // 检查handpose是否已加载
+                if (typeof handpose === 'undefined') {
+                    throw new Error('Handpose库未正确加载');
+                }
+                
+                // 加载模型
+                model = await handpose.load();
+                console.log('手势模型加载完成');
+                return true;
+            } catch (err) {
+                console.error('手势模型加载失败:', err);
+                return false;
+            }
+        }
+        
+        // 检测手势
+        async function detectHands() {
+            if (!model || usingFallback) return;
+            
+            try {
+                const predictions = await model.estimateHands(video);
+                mouse = { x: null, y: null };
+                
+                // 重置手势显示
+                leftHandElement.textContent = '未检测';
+                rightHandElement.textContent = '未检测';
+                
+                if (predictions.length > 0) {
+                    predictions.forEach(hand => {
+                        const landmarks = hand.landmarks;
+                        const handedness = hand.handedness; // 'Left' or 'Right'
+                        
+                        // 确定左右手（镜像处理）
+                        const isLeftHand = handedness === 'Left';
+                        
+                        if (isLeftHand) {
+                            // 左手 - 控制文字
+                            // 简化手势识别：计算可见的指尖数量
+                            const fingerTips = [4, 8, 12, 16, 20]; // 指尖关键点索引
+                            let extendedCount = 0;
+                            
+                            for (const tipIndex of fingerTips) {
+                                const tip = landmarks[tipIndex];
+                                const base = landmarks[tipIndex - 2]; // 指根关节
+                                
+                                // 简单判断指尖是否高于指根（Y坐标更小）
+                                if (tip[1] < base[1]) {
+                                    extendedCount++;
+                                }
+                            }
+                            
+                            leftHandElement.textContent = `${extendedCount}根手指`;
+                            
+                            // 根据手指数量设置文字
+                            if (extendedCount === 1) {
+                                if (currentText !== 'HELLO') {
+                                    currentText = 'HELLO';
+                                    createTextParticles(currentText);
+                                }
+                            } else if (extendedCount === 2) {
+                                if (currentText !== '南航') {
+                                    currentText = '南航';
+                                    createTextParticles(currentText, 150);
+                                }
+                            } else if (extendedCount === 3) {
+                                if (currentText !== 'I LOVE YOU') {
+                                    currentText = 'I LOVE YOU';
+                                    createTextParticles(currentText, 80);
+                                }
+                            }
+                        } else {
+                            // 右手 - 控制粒子行为
+                            // 简化手势识别：判断是否握拳
+                            const thumbTip = landmarks[4];
+                            const indexTip = landmarks[8];
+                            const distance = Math.sqrt(
+                                Math.pow(thumbTip[0] - indexTip[0], 2) + 
+                                Math.pow(thumbTip[1] - indexTip[1], 2)
+                            );
+                            
+                            const isFist = distance < 0.05; // 简化判断
+                            
+                            rightHandElement.textContent = isFist ? '握拳' : '张开';
+                            
+                            // 获取食指指尖位置作为鼠标位置
+                            const indexTipPos = landmarks[8];
+                            mouse.x = indexTipPos[0] * canvas.width;
+                            mouse.y = indexTipPos[1] * canvas.height;
+                            
+                            // 显示手指指示器
+                            if (!fingerIndicator) {
+                                fingerIndicator = document.createElement('div');
+                                fingerIndicator.className = 'finger-indicator';
+                                document.body.appendChild(fingerIndicator);
+                            }
+                            fingerIndicator.style.left = `${mouse.x - 15}px`;
+                            fingerIndicator.style.top = `${mouse.y - 15}px`;
+                            fingerIndicator.textContent = isFist ? '✊' : '🖐️';
+                            fingerIndicator.style.opacity = '1';
+                            
+                            // 控制粒子行为
+                            if (isFist) {
+                                contractParticles();
+                            } else {
+                                if (currentText) {
+                                    restoreTextShape();
+                                } else {
+                                    expandParticles();
+                                }
+                            }
+                        }
+                    });
+                } else {
+                    // 没有检测到手时隐藏指示器
+                    if (fingerIndicator) {
+                        fingerIndicator.style.opacity = '0';
+                    }
+                }
+            } catch (err) {
+                console.error('手势识别错误:', err);
+                // 出错时切换到备用模式
+                switchToFallbackMode();
+            }
+            
+            // 更新和绘制粒子
+            particles.forEach(particle => {
+                particle.update();
+                particle.draw();
+            });
+            
+            // 计算FPS
+            frameCount++;
+            const now = performance.now();
+            if (now >= lastTimestamp + 1000) {
+                fps = Math.round((frameCount * 1000) / (now - lastTimestamp));
+                fpsElement.textContent = fps;
+                frameCount = 0;
+                lastTimestamp = now;
+            }
+            
+            animationId = requestAnimationFrame(detectHands);
+        }
+        
+        // 切换到备用模式（键盘控制）
+        function switchToFallbackMode() {
+            usingFallback = true;
+            cancelAnimationFrame(animationId);
+            
+            // 显示备用消息
+            fallbackMessage.style.display = 'block';
+            keyboardControls.style.display = 'block';
+            
+            // 停止视频流
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+            }
+        }
+        
+        // 键盘控制
+        function setupKeyboardControls() {
+            document.addEventListener('keydown', (e) => {
+                if (!usingFallback) return;
+                
+                switch(e.key) {
+                    case '1':
+                        currentText = 'HELLO';
+                        createTextParticles(currentText);
+                        break;
+                    case '2':
+                        currentText = '南航';
+                        createTextParticles(currentText, 150);
+                        break;
+                    case '3':
+                        currentText = 'I LOVE YOU';
+                        createTextParticles(currentText, 80);
+                        break;
+                    case ' ':
+                        if (particlesContracted) {
+                            expandParticles();
+                        } else {
+                            contractParticles();
+                        }
+                        particlesContracted = !particlesContracted;
+                        break;
+                    case 'r':
+                    case 'R':
+                        createTextParticles(currentText || 'HELLO');
+                        break;
+                }
+            });
+        }
+        
         // 初始化应用
         async function initApp() {
             resizeCanvas();
             window.addEventListener('resize', resizeCanvas);
             
             try {
-                // 加载模型
-                model = await handpose.load();
-                console.log('模型加载完成');
+                // 尝试初始化手势识别
+                const handposeLoaded = await initHandpose();
+                
+                if (!handposeLoaded) {
+                    throw new Error('手势模型加载失败');
+                }
                 
                 // 初始化摄像头
                 await initCamera();
@@ -730,16 +808,27 @@
                 detectHands();
             } catch (err) {
                 console.error('初始化错误:', err);
-                loadingElement.innerHTML = `
-                    <p>初始化失败，请刷新页面重试</p>
-                    <p style="font-size: 16px; margin-top: 10px;">错误信息: ${err.message}</p>
-                    <button onclick="location.reload()" style="margin-top: 20px; padding: 8px 16px; background: #4cc9f0; border: none; border-radius: 5px; cursor: pointer;">重新加载</button>
-                `;
+                loadingElement.style.display = 'none';
+                fallbackMessage.style.display = 'block';
+                keyboardControls.style.display = 'block';
+                usingFallback = true;
+                
+                // 创建初始粒子
+                currentText = 'HELLO';
+                createTextParticles(currentText);
             }
         }
         
         // 启动应用
-        initApp();
+        startFallbackBtn.addEventListener('click', () => {
+            fallbackMessage.style.display = 'none';
+            setupKeyboardControls();
+        });
+        
+        // 自动启动
+        window.addEventListener('load', () => {
+            initApp();
+        });
     </script>
 </body>
 </html>
